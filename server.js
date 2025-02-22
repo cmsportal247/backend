@@ -1,131 +1,124 @@
 const express = require("express");
-const cors = require("cors");
-const bodyParser = require("body-parser");
-const { DynamoDBClient, ScanCommand, PutItemCommand, GetItemCommand, DeleteItemCommand } = require("@aws-sdk/client-dynamodb");
+const AWS = require("aws-sdk");
+const { DynamoDBClient, GetItemCommand, ScanCommand, PutItemCommand, DeleteItemCommand } = require("@aws-sdk/client-dynamodb");
 const { marshall, unmarshall } = require("@aws-sdk/util-dynamodb");
+const bodyParser = require("body-parser");
+const cors = require("cors");
 
 const app = express();
-const port = 4000;
-
-// ✅ Table Names
-const CASES_TABLE = "CustomerCases";
-const USERS_TABLE = "Users";
-
-// ✅ AWS DynamoDB Configuration (Secure Setup)
-const client = new DynamoDBClient({
-    region: "eu-north-1",
-    credentials: {
-        accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-    },
-});
+const port = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(bodyParser.json());
 
-// ✅ Test Route
-app.get("/", (req, res) => {
-    res.json({ message: "Customer Management System API is running with AWS SDK v3!" });
-});
+const dbClient = new DynamoDBClient({ region: "us-east-1" });
+const USERS_TABLE = "Users";
+const CASES_TABLE = "Cases";
 
-// ✅ Fetch All Cases
-app.get("/cases", async (req, res) => {
-    const params = { TableName: CASES_TABLE };
-
-    try {
-        const command = new ScanCommand(params);
-        const data = await client.send(command);
-        const cases = data.Items.map((item) => unmarshall(item));
-        res.json(cases);
-    } catch (err) {
-        res.status(500).json({ error: "Could not fetch cases", details: err.message });
-    }
-});
-
-// ✅ Add a New Case
-app.post("/add-case", async (req, res) => {
-    const { date_received, staff, mobile, name, work, info, pending, remarks, status } = req.body;
-
-    if (!name || !mobile) {
-        return res.status(400).json({ error: "Name and Mobile are required" });
-    }
-
-    const params = {
-        TableName: CASES_TABLE,
-        Item: marshall({
-            id: Date.now().toString(),
-            date_received,
-            staff,
-            mobile,
-            name,
-            work,
-            info,
-            pending,
-            remarks,
-            status,
-        }),
-    };
-
-    try {
-        const command = new PutItemCommand(params);
-        await client.send(command);
-        res.json({ success: true, message: "Case added successfully!" });
-    } catch (err) {
-        res.status(500).json({ error: "Could not add case", details: err.message });
-    }
-});
-
-// ✅ Delete a Case
-app.delete("/delete-case/:id", async (req, res) => {
-    const { id } = req.params;
-
-    const params = {
-        TableName: CASES_TABLE,
-        Key: marshall({ id }),
-    };
-
-    try {
-        const command = new DeleteItemCommand(params);
-        await client.send(command);
-        res.json({ success: true, message: "Case deleted successfully!" });
-    } catch (err) {
-        res.status(500).json({ error: "Could not delete case", details: err.message });
-    }
-});
-
-// ✅ User Login
+// ✅ Login Route (Fixed with detailed logs)
 app.post("/login", async (req, res) => {
     const { username, password } = req.body;
 
+    console.log("🔑 Login Attempt:", { username });
+
     if (!username || !password) {
-        return res.status(400).json({ error: "Username and Password are required" });
+        return res.status(400).json({ error: "Username and password are required" });
     }
 
-    const params = {
-        TableName: USERS_TABLE,
-        Key: marshall({ id: username }),
-    };
-
     try {
-        const command = new GetItemCommand(params);
-        const { Item } = await client.send(command);
+        const params = {
+            TableName: USERS_TABLE,
+            Key: marshall({ id: username }),
+        };
 
-        if (Item && Item.password.S === password) {
-            res.json({ 
-                success: true, 
-                role: Item.role.S,
-                message: "Login successful!"
-            });
+        const { Item } = await dbClient.send(new GetItemCommand(params));
+
+        if (Item) {
+            const user = unmarshall(Item);
+            console.log("👤 User Found:", user);
+
+            if (user.password === password) {
+                res.json({ message: "Login successful", user: { username: user.id, role: user.role } });
+            } else {
+                res.status(401).json({ error: "Invalid password" });
+            }
         } else {
-            res.status(401).json({ success: false, message: "Invalid credentials" });
+            res.status(404).json({ error: "User not found" });
         }
-
     } catch (err) {
+        console.error("❌ Login failed:", err);
         res.status(500).json({ error: "Login failed", details: err.message });
     }
 });
 
-// ✅ Start the Server
+// ✅ Fetch Cases
+app.get("/cases", async (req, res) => {
+    try {
+        const { search } = req.query;
+        console.log("🔍 Fetching cases with search:", search || "No search");
+
+        const params = { TableName: CASES_TABLE };
+        const { Items } = await dbClient.send(new ScanCommand(params));
+
+        const cases = Items.map((item) => unmarshall(item));
+
+        if (search) {
+            const filteredCases = cases.filter((c) => c.name.toLowerCase().includes(search.toLowerCase()));
+            res.json(filteredCases);
+        } else {
+            res.json(cases);
+        }
+    } catch (err) {
+        console.error("❌ Error fetching cases:", err);
+        res.status(500).json({ error: "Failed to fetch cases", details: err.message });
+    }
+});
+
+// ✅ Add Case
+app.post("/add-case", async (req, res) => {
+    const caseData = req.body;
+
+    console.log("➕ Adding new case:", caseData);
+
+    try {
+        if (!caseData.id) {
+            caseData.id = Date.now().toString(); // Add unique ID if missing
+        }
+
+        const params = {
+            TableName: CASES_TABLE,
+            Item: marshall(caseData),
+        };
+
+        await dbClient.send(new PutItemCommand(params));
+        res.json({ message: "Case added successfully!" });
+    } catch (err) {
+        console.error("❌ Error adding case:", err);
+        res.status(500).json({ error: "Failed to add case", details: err.message });
+    }
+});
+
+// ✅ Delete Case
+app.delete("/delete-case/:id", async (req, res) => {
+    const { id } = req.params;
+
+    console.log("🗑️ Deleting case with ID:", id);
+
+    try {
+        const params = {
+            TableName: CASES_TABLE,
+            Key: marshall({ id }),
+        };
+
+        await dbClient.send(new DeleteItemCommand(params));
+        res.json({ message: "Case deleted successfully!" });
+    } catch (err) {
+        console.error("❌ Error deleting case:", err);
+        res.status(500).json({ error: "Failed to delete case", details: err.message });
+    }
+});
+
+// ✅ Start Server
 app.listen(port, () => {
-    console.log(`✅ Server running on http://localhost:${port}`);
+    console.log(`🚀 Server running on port ${port}`);
 });
