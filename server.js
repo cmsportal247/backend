@@ -1,25 +1,27 @@
 const express = require("express");
-const TABLE_NAME = "CustomerCases";
-const { DynamoDBClient, ScanCommand, PutItemCommand, DeleteItemCommand } = require("@aws-sdk/client-dynamodb");
 const cors = require("cors");
 const bodyParser = require("body-parser");
+const { DynamoDBClient, ScanCommand, PutItemCommand, GetItemCommand, DeleteItemCommand } = require("@aws-sdk/client-dynamodb");
 const { marshall, unmarshall } = require("@aws-sdk/util-dynamodb");
 
 const app = express();
 const port = 4000;
 
-app.use(cors());
-app.use(bodyParser.json());
+// ✅ Table Names
+const CASES_TABLE = "CustomerCases";
+const USERS_TABLE = "Users";
 
-// ✅ AWS DynamoDB Configuration (Direct Credentials)
+// ✅ AWS DynamoDB Configuration (Secure Setup)
 const client = new DynamoDBClient({
     region: "eu-north-1",
     credentials: {
-        accessKeyId: "AKIAUBKFB7SHVAAB7HE3",
-        secretAccessKey: "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",
+        accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
     },
 });
 
+app.use(cors());
+app.use(bodyParser.json());
 
 // ✅ Test Route
 app.get("/", (req, res) => {
@@ -28,10 +30,7 @@ app.get("/", (req, res) => {
 
 // ✅ Fetch All Cases
 app.get("/cases", async (req, res) => {
-    const params = {
-        TableName: TABLE_NAME,
-        
-    };
+    const params = { TableName: CASES_TABLE };
 
     try {
         const command = new ScanCommand(params);
@@ -52,7 +51,7 @@ app.post("/add-case", async (req, res) => {
     }
 
     const params = {
-        TableName: TABLE_NAME,
+        TableName: CASES_TABLE,
         Item: marshall({
             id: Date.now().toString(),
             date_received,
@@ -81,7 +80,7 @@ app.delete("/delete-case/:id", async (req, res) => {
     const { id } = req.params;
 
     const params = {
-        TableName: TABLE_NAME,
+        TableName: CASES_TABLE,
         Key: marshall({ id }),
     };
 
@@ -91,6 +90,38 @@ app.delete("/delete-case/:id", async (req, res) => {
         res.json({ success: true, message: "Case deleted successfully!" });
     } catch (err) {
         res.status(500).json({ error: "Could not delete case", details: err.message });
+    }
+});
+
+// ✅ User Login
+app.post("/login", async (req, res) => {
+    const { username, password } = req.body;
+
+    if (!username || !password) {
+        return res.status(400).json({ error: "Username and Password are required" });
+    }
+
+    const params = {
+        TableName: USERS_TABLE,
+        Key: marshall({ id: username }),
+    };
+
+    try {
+        const command = new GetItemCommand(params);
+        const { Item } = await client.send(command);
+
+        if (Item && Item.password.S === password) {
+            res.json({ 
+                success: true, 
+                role: Item.role.S,
+                message: "Login successful!"
+            });
+        } else {
+            res.status(401).json({ success: false, message: "Invalid credentials" });
+        }
+
+    } catch (err) {
+        res.status(500).json({ error: "Login failed", details: err.message });
     }
 });
 
