@@ -1,0 +1,12 @@
+# Ignore node_modules folder (installed packages)
+node_modules/
+
+# Ignore AWS credentials or environment variables
+.env
+
+# Ignore log files
+*.log
+
+# Ignore system files
+.DS_Store
+Thumbs.db
