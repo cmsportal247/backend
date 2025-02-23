@@ -32,9 +32,15 @@ const dbClient = new DynamoDBClient({
 const USERS_TABLE = "users";
 const CASES_TABLE = "CustomerCases";
 
+// ✅ Health Check
+app.get("/", (req, res) => {
+    res.send("Customer Management System Backend is Running!");
+});
+
 // ✅ User Login
 app.post("/login", async (req, res) => {
     const { username, password } = req.body;
+    console.log("Login request received:", { username });
 
     const params = {
         TableName: USERS_TABLE,
@@ -45,12 +51,15 @@ app.post("/login", async (req, res) => {
         const { Item } = await dbClient.send(new GetItemCommand(params));
 
         if (!Item) {
+            console.log("User not found in database!");
             return res.status(404).json({ error: "User not found" });
         }
 
         const user = unmarshall(Item);
+        console.log("User found:", user);
 
         const passwordMatch = await bcrypt.compare(password, user.password);
+        console.log("Password match result:", passwordMatch);
 
         if (passwordMatch) {
             res.json({ 
@@ -58,11 +67,40 @@ app.post("/login", async (req, res) => {
                 user: { username: user.username, role: user.role } 
             });
         } else {
+            console.log("Invalid password!");
             res.status(401).json({ error: "Invalid password" });
         }
     } catch (error) {
         console.error("Login failed:", error);
         res.status(500).json({ error: "Login failed." });
+    }
+});
+
+// ✅ Add New User
+app.post("/add-user", async (req, res) => {
+    const { username, password, role } = req.body;
+
+    if (!username || !password || !role) {
+        return res.status(400).json({ error: "All fields are required (username, password, role)" });
+    }
+
+    try {
+        const hashedPassword = await bcrypt.hash(password, 10);
+        const params = {
+            TableName: USERS_TABLE,
+            Item: marshall({ 
+                username,
+                password: hashedPassword,
+                role
+            }),
+        };
+
+        await dbClient.send(new PutItemCommand(params));
+        res.json({ message: "User added successfully!" });
+
+    } catch (error) {
+        console.error("Add user failed:", error);
+        res.status(500).json({ error: "Failed to add user." });
     }
 });
 
@@ -78,7 +116,6 @@ app.get("/cases", async (req, res) => {
         if (Items && Items.length > 0) {
             const cases = Items.map((item) => unmarshall(item));
 
-            // Manually filter results
             const filteredCases = cases.filter((c) => 
                 c.name?.toLowerCase().includes(search.toLowerCase()) ||
                 c.mobile?.includes(search) ||
@@ -121,27 +158,6 @@ app.post("/add-case", async (req, res) => {
     }
 });
 
-// ✅ Update Existing Case
-app.put("/update-case/:id", async (req, res) => {
-    const { id } = req.params;
-    const updatedCase = req.body;
-
-    updatedCase.updatedAt = new Date().toISOString();
-
-    const params = {
-        TableName: CASES_TABLE,
-        Item: marshall({ id, ...updatedCase }),
-    };
-
-    try {
-        await dbClient.send(new PutItemCommand(params));
-        res.json({ message: "Case updated successfully!" });
-    } catch (error) {
-        console.error("Update case failed:", error);
-        res.status(500).json({ error: "Failed to update case." });
-    }
-});
-
 // ✅ Delete Case (Admin Only)
 app.delete("/delete-case/:id", async (req, res) => {
     const { id } = req.params;
@@ -165,84 +181,7 @@ app.delete("/delete-case/:id", async (req, res) => {
     }
 });
 
-// ✅ Export Cases to Excel
-app.get("/export-excel", async (req, res) => {
-    const params = { TableName: CASES_TABLE };
-
-    try {
-        const { Items } = await dbClient.send(new ScanCommand(params));
-        const cases = Items.map((item) => unmarshall(item));
-
-        const workbook = new excelJS.Workbook();
-        const worksheet = workbook.addWorksheet("Cases");
-
-        worksheet.columns = [
-            { header: "Date Received", key: "date_received", width: 15 },
-            { header: "Staff", key: "staff", width: 20 },
-            { header: "Mobile", key: "mobile", width: 15 },
-            { header: "Name", key: "name", width: 20 },
-            { header: "Work", key: "work", width: 20 },
-            { header: "Information", key: "info", width: 30 },
-            { header: "Pending", key: "pending", width: 15 },
-            { header: "Remarks", key: "remarks", width: 25 },
-            { header: "Status", key: "status", width: 15 },
-        ];
-
-        cases.forEach((caseItem) => {
-            worksheet.addRow(caseItem);
-        });
-
-        res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-        res.setHeader("Content-Disposition", "attachment; filename=cases.xlsx");
-
-        await workbook.xlsx.write(res);
-        res.end();
-    } catch (error) {
-        console.error("Export cases failed:", error);
-        res.status(500).json({ error: "Failed to export cases." });
-    }
-});
-
-// ✅ Change Password
-app.put("/change-password", async (req, res) => {
-    const { username, oldPassword, newPassword } = req.body;
-
-    const params = {
-        TableName: USERS_TABLE,
-        Key: marshall({ username }),
-    };
-
-    try {
-        const { Item } = await dbClient.send(new GetItemCommand(params));
-
-        if (!Item) {
-            return res.status(404).json({ error: "User not found" });
-        }
-
-        const user = unmarshall(Item);
-
-        const passwordMatch = await bcrypt.compare(oldPassword, user.password);
-        if (!passwordMatch) {
-            return res.status(401).json({ error: "Old password is incorrect" });
-        }
-
-        const hashedPassword = await bcrypt.hash(newPassword, 10);
-
-        const updateParams = {
-            TableName: USERS_TABLE,
-            Item: marshall({ ...user, password: hashedPassword }),
-        };
-
-        await dbClient.send(new PutItemCommand(updateParams));
-
-        res.json({ message: "Password updated successfully" });
-    } catch (error) {
-        console.error("Password change failed:", error);
-        res.status(500).json({ error: "Failed to change password." });
-    }
-});
-
 // ✅ Start Server
 app.listen(port, () => {
-    console.log(` Server running on port ${port}`);
+    console.log(`Server running on port ${port}`);
 });
