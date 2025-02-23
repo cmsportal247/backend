@@ -1,190 +1,138 @@
+require('dotenv').config();
 const express = require("express");
-const mysql = require("mysql2");
-const bodyParser = require("body-parser");
 const cors = require("cors");
-const excelJS = require("exceljs");
-const bcrypt = require("bcrypt");
+const bodyParser = require("body-parser");
+const { v4: uuidv4 } = require('uuid'); // For unique ID generation
+const { 
+    DynamoDBClient, 
+    GetItemCommand, 
+    PutItemCommand, 
+    ScanCommand, 
+    DeleteItemCommand 
+} = require("@aws-sdk/client-dynamodb");
+const { marshall, unmarshall } = require("@aws-sdk/util-dynamodb");
 
 const app = express();
-const port = 3000;
+const port = 4000;
 
 app.use(cors());
 app.use(bodyParser.json());
 
-// ✅ MySQL Connection
-const db = mysql.createConnection({
-    host: "localhost",
-    user: "root",
-    password: "",
-    database: "cms_db",
-});
-
-db.connect((err) => {
-    if (err) {
-        console.error("Database connection failed: " + err.stack);
-        return;
+// AWS DynamoDB Configuration
+const dbClient = new DynamoDBClient({ 
+    region: process.env.AWS_REGION, 
+    credentials: {
+        accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
     }
-    console.log("Connected to MySQL database ✅");
 });
 
-// ✅ Fetch All Cases (with Search)
-app.get("/cases", (req, res) => {
-    const search = req.query.search || "";
+const USERS_TABLE = "users";
+const CASES_TABLE = "CustomerCases";
 
-    const sql = `
-        SELECT * FROM cases 
-        WHERE name LIKE ? OR mobile LIKE ? OR status LIKE ? 
-        ORDER BY date_received DESC
-    `;
-
-    db.query(sql, [`%${search}%`, `%${search}%`, `%${search}%`], (err, results) => {
-        if (err) {
-            res.status(500).json({ error: "Database error" });
-        } else {
-            res.json(results);
-        }
-    });
-});
-
-// ✅ Add New Case
-app.post("/add-case", (req, res) => {
-    const newCase = req.body;
-
-    const sql = "INSERT INTO cases SET ?";
-    db.query(sql, newCase, (err, result) => {
-        if (err) {
-            res.status(500).json({ error: "Failed to add case" });
-        } else {
-            res.json({ message: "Case added successfully" });
-        }
-    });
-});
-
-// ✅ Update Existing Case
-app.put("/update-case/:id", (req, res) => {
-    const caseId = req.params.id;
-    const updatedCase = req.body;
-
-    const sql = "UPDATE cases SET ? WHERE id = ?";
-    db.query(sql, [updatedCase, caseId], (err, result) => {
-        if (err) {
-            res.status(500).json({ error: "Failed to update case" });
-        } else {
-            res.json({ message: "Case updated successfully" });
-        }
-    });
-});
-
-// ✅ Delete Case
-app.delete("/delete-case/:id", (req, res) => {
-    const caseId = req.params.id;
-
-    const sql = "DELETE FROM cases WHERE id = ?";
-    db.query(sql, caseId, (err, result) => {
-        if (err) {
-            res.status(500).json({ error: "Failed to delete case" });
-        } else {
-            res.json({ message: "Case deleted successfully" });
-        }
-    });
-});
-
-// ✅ Export Cases to Excel
-app.get("/export-excel", (req, res) => {
-    const sql = "SELECT * FROM cases";
-
-    db.query(sql, (err, results) => {
-        if (err) {
-            res.status(500).json({ error: "Failed to fetch cases for export" });
-            return;
-        }
-
-        const workbook = new excelJS.Workbook();
-        const worksheet = workbook.addWorksheet("Cases");
-
-        worksheet.columns = [
-            { header: "Date Received", key: "date_received", width: 15 },
-            { header: "Staff", key: "staff", width: 20 },
-            { header: "Mobile", key: "mobile", width: 15 },
-            { header: "Name", key: "name", width: 20 },
-            { header: "Work", key: "work", width: 20 },
-            { header: "Information", key: "info", width: 30 },
-            { header: "Pending", key: "pending", width: 15 },
-            { header: "Remarks", key: "remarks", width: 25 },
-            { header: "Status", key: "status", width: 15 },
-        ];
-
-        results.forEach((caseItem) => {
-            worksheet.addRow(caseItem);
-        });
-
-        res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-        res.setHeader("Content-Disposition", "attachment; filename=cases.xlsx");
-
-        workbook.xlsx.write(res).then(() => {
-            res.end();
-        });
-    });
-});
-
-// ✅ User Login
-app.post("/login", (req, res) => {
+// Login Route
+app.post("/login", async (req, res) => {
     const { username, password } = req.body;
 
-    const sql = "SELECT * FROM users WHERE username = ?";
-    db.query(sql, [username], (err, results) => {
-        if (err || results.length === 0) {
-            return res.status(401).json({ error: "Invalid username or password" });
-        }
+    console.log("Login Attempt:", { username });
 
-        const user = results[0];
+    const params = {
+        TableName: USERS_TABLE,
+        Key: marshall({ username }),   // Match with DynamoDB primary key
+    };
 
-        bcrypt.compare(password, user.password, (err, result) => {
-            if (result) {
-                res.json({ message: "Login successful", user: { username: user.username, role: user.role } });
+    try {
+        const { Item } = await dbClient.send(new GetItemCommand(params));
+
+        if (Item) {
+            const user = unmarshall(Item);
+
+            if (user.password === password) {
+                res.json({ user });
             } else {
-                res.status(401).json({ error: "Invalid username or password" });
+                res.status(401).json({ error: "Invalid password" });
             }
-        });
-    });
-});
-
-// ✅ Change Password
-app.put("/change-password", (req, res) => {
-    const { username, oldPassword, newPassword } = req.body;
-
-    const sql = "SELECT * FROM users WHERE username = ?";
-    db.query(sql, [username], (err, results) => {
-        if (err || results.length === 0) {
-            return res.status(404).json({ error: "User not found" });
+        } else {
+            res.status(404).json({ error: "User not found" });
         }
-
-        const user = results[0];
-
-        bcrypt.compare(oldPassword, user.password, (err, result) => {
-            if (!result) {
-                return res.status(401).json({ error: "Old password is incorrect" });
-            }
-
-            bcrypt.hash(newPassword, 10, (err, hash) => {
-                if (err) {
-                    return res.status(500).json({ error: "Failed to hash new password" });
-                }
-
-                const updateSql = "UPDATE users SET password = ? WHERE username = ?";
-                db.query(updateSql, [hash, username], (err) => {
-                    if (err) {
-                        res.status(500).json({ error: "Failed to update password" });
-                    } else {
-                        res.json({ message: "Password updated successfully" });
-                    }
-                });
-            });
-        });
-    });
+    } catch (error) {
+        console.error("Login failed:", error);
+        res.status(500).json({ error: "Login failed. Check server logs." });
+    }
 });
 
-// ✅ Server
+// Fetch Cases
+app.get("/cases", async (req, res) => {
+    const params = { TableName: CASES_TABLE };
+
+    try {
+        const { Items } = await dbClient.send(new ScanCommand(params));
+
+        if (Items && Items.length > 0) {
+            const cases = Items.map((item) => unmarshall(item));
+            res.json(cases);
+        } else {
+            res.json([]);
+        }
+    } catch (error) {
+        console.error("Fetch cases failed:", error);
+        res.status(500).json({ error: "Failed to fetch cases." });
+    }
+});
+
+// Add Case
+app.post("/add-case", async (req, res) => {
+    const caseData = req.body;
+
+    // Ensure ID and createdAt timestamp
+    if (!caseData.id) {
+        caseData.id = uuidv4(); // Generate a unique ID if not provided
+    }
+
+    if (!caseData.createdAt) {
+        caseData.createdAt = new Date().toISOString(); // Add timestamp if missing
+    }
+
+    const params = {
+        TableName: CASES_TABLE,
+        Item: marshall(caseData),
+    };
+
+    try {
+        await dbClient.send(new PutItemCommand(params));
+        res.json({ message: "Case added successfully!", caseId: caseData.id });
+    } catch (error) {
+        console.error("Add case failed:", error);
+        res.status(500).json({ error: "Failed to add case." });
+    }
+});
+
+
+// Delete Case
+app.delete("/delete-case/:id", async (req, res) => {
+    const { id } = req.params;
+
+    const params = {
+        TableName: CASES_TABLE,
+        Key: marshall({ id }),
+    };
+
+    try {
+        const result = await dbClient.send(new DeleteItemCommand(params));
+
+        if (result) {
+            res.json({ message: "Case deleted successfully!" });
+        } else {
+            res.status(404).json({ error: "Case not found" });
+        }
+    } catch (error) {
+        console.error("Delete case failed:", error);
+        res.status(500).json({ error: "Failed to delete case." });
+    }
+});
+
+// Start Server
 app.listen(port, () => {
-    console.log(`Server running at http://localhost:${port}`);
+    console.log(`🚀 Server running on port ${port}`);
 });
+
