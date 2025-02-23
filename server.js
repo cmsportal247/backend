@@ -25,8 +25,8 @@ const dbClient = new DynamoDBClient({
     }
 });
 
-const USERS_TABLE = "Users";    // Your DynamoDB Users table
-const CASES_TABLE = "Cases";    // Your DynamoDB Cases table
+const USERS_TABLE = "users";    // Your DynamoDB Users table
+const CASES_TABLE = "CustomerCases";    // Your DynamoDB Cases table
 
 // Login Route
 app.post("/login", async (req, res) => {
