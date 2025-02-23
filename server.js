@@ -2,13 +2,10 @@ require('dotenv').config();
 const express = require("express");
 const cors = require("cors");
 const bodyParser = require("body-parser");
-const { v4: uuidv4 } = require('uuid');
 const { 
     DynamoDBClient, 
     GetItemCommand, 
-    PutItemCommand, 
-    ScanCommand, 
-    DeleteItemCommand 
+    PutItemCommand 
 } = require("@aws-sdk/client-dynamodb");
 const { marshall, unmarshall } = require("@aws-sdk/util-dynamodb");
 
@@ -28,7 +25,6 @@ const dbClient = new DynamoDBClient({
 });
 
 const USERS_TABLE = "users";
-const CASES_TABLE = "CustomerCases";
 
 // ✅ Add New User (Plain Text Password)
 app.post("/add-user", async (req, res) => {
@@ -40,7 +36,7 @@ app.post("/add-user", async (req, res) => {
 
     const userData = {
         username,
-        password, // 🚨 Plain text password (for demo)
+        password,  // 🚨 Storing password as plain text
         role
     };
 
@@ -58,9 +54,13 @@ app.post("/add-user", async (req, res) => {
     }
 });
 
-// ✅ User Login (Plain Text Password)
+// ✅ User Login (Plain Text Passwords)
 app.post("/login", async (req, res) => {
     const { username, password } = req.body;
+
+    if (!username || !password) {
+        return res.status(400).json({ error: "Username and password are required" });
+    }
 
     const params = {
         TableName: USERS_TABLE,
