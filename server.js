@@ -38,7 +38,7 @@ app.post("/login", async (req, res) => {
 
     const params = {
         TableName: USERS_TABLE,
-        Key: marshall({ id: username }),   // Use 'id' as the key (consistent with DynamoDB best practices)
+        Key: marshall({ username }),   // Match with DynamoDB primary key
     };
 
     try {
@@ -84,8 +84,9 @@ app.get("/cases", async (req, res) => {
 app.post("/add-case", async (req, res) => {
     const caseData = req.body;
 
-    // Ensure ID is included or generate a new one
-    caseData.id = caseData.id || uuidv4(); 
+    // Ensure ID and createdAt timestamp
+    caseData.id = caseData.id || uuidv4();
+    caseData.createdAt = new Date().toISOString();
 
     const params = {
         TableName: CASES_TABLE,
@@ -111,8 +112,13 @@ app.delete("/delete-case/:id", async (req, res) => {
     };
 
     try {
-        await dbClient.send(new DeleteItemCommand(params));
-        res.json({ message: "Case deleted successfully!" });
+        const result = await dbClient.send(new DeleteItemCommand(params));
+
+        if (result) {
+            res.json({ message: "Case deleted successfully!" });
+        } else {
+            res.status(404).json({ error: "Case not found" });
+        }
     } catch (error) {
         console.error("Delete case failed:", error);
         res.status(500).json({ error: "Failed to delete case." });
