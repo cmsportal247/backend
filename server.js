@@ -3,7 +3,7 @@ const express = require("express");
 const cors = require("cors");
 const bodyParser = require("body-parser");
 const { v4: uuidv4 } = require('uuid');
-const bcrypt = require('bcryptjs');
+const bcrypt = require('bcrypt');
 const excelJS = require('exceljs');
 
 const { 
