@@ -85,8 +85,13 @@ app.post("/add-case", async (req, res) => {
     const caseData = req.body;
 
     // Ensure ID and createdAt timestamp
-    caseData.id = caseData.id || uuidv4();
-    caseData.createdAt = new Date().toISOString();
+    if (!caseData.id) {
+        caseData.id = uuidv4(); // Generate a unique ID if not provided
+    }
+
+    if (!caseData.createdAt) {
+        caseData.createdAt = new Date().toISOString(); // Add timestamp if missing
+    }
 
     const params = {
         TableName: CASES_TABLE,
@@ -101,6 +106,7 @@ app.post("/add-case", async (req, res) => {
         res.status(500).json({ error: "Failed to add case." });
     }
 });
+
 
 // Delete Case
 app.delete("/delete-case/:id", async (req, res) => {
