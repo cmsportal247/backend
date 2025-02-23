@@ -2,6 +2,7 @@ require('dotenv').config();
 const express = require("express");
 const cors = require("cors");
 const bodyParser = require("body-parser");
+const { v4: uuidv4 } = require('uuid'); // For unique ID generation
 const { 
     DynamoDBClient, 
     GetItemCommand, 
@@ -37,7 +38,7 @@ app.post("/login", async (req, res) => {
 
     const params = {
         TableName: USERS_TABLE,
-        Key: marshall({ username }),   // Use 'username' as the key
+        Key: marshall({ id: username }),   // Use 'id' as the key (consistent with DynamoDB best practices)
     };
 
     try {
@@ -83,6 +84,9 @@ app.get("/cases", async (req, res) => {
 app.post("/add-case", async (req, res) => {
     const caseData = req.body;
 
+    // Ensure ID is included or generate a new one
+    caseData.id = caseData.id || uuidv4(); 
+
     const params = {
         TableName: CASES_TABLE,
         Item: marshall(caseData),
@@ -90,7 +94,7 @@ app.post("/add-case", async (req, res) => {
 
     try {
         await dbClient.send(new PutItemCommand(params));
-        res.json({ message: "Case added successfully!" });
+        res.json({ message: "Case added successfully!", caseId: caseData.id });
     } catch (error) {
         console.error("Add case failed:", error);
         res.status(500).json({ error: "Failed to add case." });
