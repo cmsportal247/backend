@@ -1,4 +1,10 @@
-const { DynamoDBClient, GetItemCommand, PutItemCommand, ScanCommand, DeleteItemCommand } = require("@aws-sdk/client-dynamodb");
+const { 
+    DynamoDBClient, 
+    GetItemCommand, 
+    PutItemCommand, 
+    ScanCommand, 
+    DeleteItemCommand 
+} = require("@aws-sdk/client-dynamodb");
 const express = require("express");
 const cors = require("cors");
 const bodyParser = require("body-parser");
@@ -10,18 +16,26 @@ const port = 4000;
 app.use(cors());
 app.use(bodyParser.json());
 
-// ✅ AWS DynamoDB Configuration
-const dbClient = new DynamoDBClient({ region: "eu-north-1" }); // Replace with your region
-const TABLE_NAME = "Users";
+//  AWS DynamoDB Configuration
+const dbClient = new DynamoDBClient({ 
+    region: "eu-north-1", // Change to your region
+    credentials: {
+        accessKeyId: "AKIAUBKFB7SHVAAB7HE3",          // Add your AWS access key
+        secretAccessKey: "ufzgG3FoBERc/mRnRJlpxWfMuQHAgHSkooVSzYgT"       // Add your AWS secret key
+    }
+});
 
-// ✅ Login Route
+const USERS_TABLE = "Users";    // Your DynamoDB Users table
+const CASES_TABLE = "Cases";    // Your DynamoDB Cases table
+
+// Login Route
 app.post("/login", async (req, res) => {
     const { username, password } = req.body;
 
-    console.log("🔑 Login Attempt:", { username });
+    console.log("Login Attempt:", { username });
 
     const params = {
-        TableName: TABLE_NAME,
+        TableName: USERS_TABLE,
         Key: marshall({ id: username }),
     };
 
@@ -40,14 +54,14 @@ app.post("/login", async (req, res) => {
             res.status(404).json({ error: "User not found" });
         }
     } catch (error) {
-        console.error("❌ Login failed:", error);
+        console.error(" Login failed:", error);
         res.status(500).json({ error: "Login failed. Check server logs." });
     }
 });
 
-// ✅ Fetch Cases
+// Fetch Cases
 app.get("/cases", async (req, res) => {
-    const params = { TableName: "Cases" };
+    const params = { TableName: CASES_TABLE };
 
     try {
         const { Items } = await dbClient.send(new ScanCommand(params));
@@ -59,17 +73,17 @@ app.get("/cases", async (req, res) => {
             res.json([]);
         }
     } catch (error) {
-        console.error("❌ Fetch cases failed:", error);
+        console.error(" Fetch cases failed:", error);
         res.status(500).json({ error: "Failed to fetch cases." });
     }
 });
 
-// ✅ Add Case
+//  Add Case
 app.post("/add-case", async (req, res) => {
     const caseData = req.body;
 
     const params = {
-        TableName: "Cases",
+        TableName: CASES_TABLE,
         Item: marshall(caseData),
     };
 
@@ -77,17 +91,17 @@ app.post("/add-case", async (req, res) => {
         await dbClient.send(new PutItemCommand(params));
         res.json({ message: "Case added successfully!" });
     } catch (error) {
-        console.error("❌ Add case failed:", error);
+        console.error(" Add case failed:", error);
         res.status(500).json({ error: "Failed to add case." });
     }
 });
 
-// ✅ Delete Case
+//  Delete Case
 app.delete("/delete-case/:id", async (req, res) => {
     const { id } = req.params;
 
     const params = {
-        TableName: "Cases",
+        TableName: CASES_TABLE,
         Key: marshall({ id }),
     };
 
@@ -95,12 +109,12 @@ app.delete("/delete-case/:id", async (req, res) => {
         await dbClient.send(new DeleteItemCommand(params));
         res.json({ message: "Case deleted successfully!" });
     } catch (error) {
-        console.error("❌ Delete case failed:", error);
+        console.error("Delete case failed:", error);
         res.status(500).json({ error: "Failed to delete case." });
     }
 });
 
-// ✅ Start Server
+// Start Server
 app.listen(port, () => {
     console.log(`🚀 Server running on port ${port}`);
 });
