@@ -11,7 +11,7 @@ app.use(cors());
 app.use(bodyParser.json());
 
 // ✅ AWS DynamoDB Configuration
-const dbClient = new DynamoDBClient({ region: "your-region" }); // Replace with your region
+const dbClient = new DynamoDBClient({ region: "eu-north-1" }); // Replace with your region
 const TABLE_NAME = "Users";
 
 // ✅ Login Route
