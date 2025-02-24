@@ -27,7 +27,7 @@ const dbClient = new DynamoDBClient({
 });
 
 const USERS_TABLE = "users";
-const CASES_TABLE = "cases"; // Make sure your table name is correct!
+const CASES_TABLE = "CustomerCases"; // Make sure your table name is correct!
 
 // ✅ Add New User (Plain Text Password)
 app.post("/add-user", async (req, res) => {
