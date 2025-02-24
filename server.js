@@ -15,6 +15,7 @@ const app = express();
 const port = 4000;
 
 app.use(cors());
+
 app.use(bodyParser.json());
 
 // AWS DynamoDB Configuration
