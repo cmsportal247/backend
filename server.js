@@ -5,7 +5,8 @@ const bodyParser = require("body-parser");
 const { 
     DynamoDBClient, 
     GetItemCommand, 
-    PutItemCommand 
+    PutItemCommand,
+    ScanCommand   // ✅ Added ScanCommand here!
 } = require("@aws-sdk/client-dynamodb");
 const { marshall, unmarshall } = require("@aws-sdk/util-dynamodb");
 const jwt = require("jsonwebtoken");
@@ -118,7 +119,7 @@ app.get("/cases", async (req, res) => {
             TableName: "cases"  // Make sure the table name matches exactly!
         };
 
-        const data = await dbClient.send(new ScanCommand(params));
+        const data = await dbClient.send(new ScanCommand(params));  // ✅ ScanCommand fixed
         console.log("📂 Fetched cases data:", data.Items); // Log the fetched data
 
         res.json(data.Items || []);
@@ -127,7 +128,6 @@ app.get("/cases", async (req, res) => {
         res.status(403).json({ error: "Invalid or expired token" });
     }
 });
-
 
 // ✅ Start Server
 app.listen(port, () => {
