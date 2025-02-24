@@ -37,7 +37,7 @@ app.post("/add-user", async (req, res) => {
 
     const userData = {
         username,
-        password,  // 🚨 Storing password as plain text (for now)
+        password,  // 🚨 Plain text password (for demo purposes)
         role
     };
 
@@ -48,9 +48,10 @@ app.post("/add-user", async (req, res) => {
 
     try {
         await dbClient.send(new PutItemCommand(params));
+        console.log(`✅ User ${username} added successfully!`);
         res.json({ message: "User added successfully!" });
     } catch (error) {
-        console.error("Add user failed:", error);
+        console.error("❌ Add user failed:", error);
         res.status(500).json({ error: "Failed to add user." });
     }
 });
@@ -78,7 +79,7 @@ app.post("/login", async (req, res) => {
 
         const user = unmarshall(Item);
 
-        // 🚨 Plain text password check (replace with hashing later!)
+        // 🚨 Plain text password check
         if (password === user.password) {
             console.log("✅ Login successful:", username);
 
@@ -95,7 +96,7 @@ app.post("/login", async (req, res) => {
             res.status(401).json({ error: "Invalid credentials" });
         }
     } catch (error) {
-        console.error("Login failed:", error);
+        console.error("❌ Login failed:", error);
         res.status(500).json({ error: "Login failed." });
     }
 });
@@ -112,10 +113,10 @@ app.get("/cases", (req, res) => {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
         console.log("🔓 Token verified:", decoded);
 
-        // Fetch cases logic here...
+        // Demo response (replace with real data fetching logic)
         res.json([{ id: 1, name: "Example Case", status: "Open" }]);
     } catch (error) {
-        console.error("Invalid token:", error);
+        console.error("❌ Invalid token:", error);
         res.status(403).json({ error: "Invalid or expired token" });
     }
 });
