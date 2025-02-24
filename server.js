@@ -5,8 +5,8 @@ const bodyParser = require("body-parser");
 const { 
     DynamoDBClient, 
     GetItemCommand, 
-    PutItemCommand,
-    ScanCommand   // ✅ Added ScanCommand here!
+    PutItemCommand, 
+    ScanCommand 
 } = require("@aws-sdk/client-dynamodb");
 const { marshall, unmarshall } = require("@aws-sdk/util-dynamodb");
 const jwt = require("jsonwebtoken");
@@ -27,6 +27,7 @@ const dbClient = new DynamoDBClient({
 });
 
 const USERS_TABLE = "users";
+const CASES_TABLE = "cases"; // Make sure your table name is correct!
 
 // ✅ Add New User (Plain Text Password)
 app.post("/add-user", async (req, res) => {
@@ -38,7 +39,7 @@ app.post("/add-user", async (req, res) => {
 
     const userData = {
         username,
-        password,  // 🚨 Plain text password (for demo purposes)
+        password,  
         role
     };
 
@@ -57,7 +58,7 @@ app.post("/add-user", async (req, res) => {
     }
 });
 
-// ✅ User Login (With Token)
+// ✅ User Login (With Token — No Expiry)
 app.post("/login", async (req, res) => {
     const { username, password } = req.body;
 
@@ -84,9 +85,8 @@ app.post("/login", async (req, res) => {
         if (password === user.password) {
             console.log("✅ Login successful:", username);
 
-            // Generate a JWT token
+            // Generate a JWT token (no expiry)
             const token = jwt.sign({ username: user.username, role: user.role }, process.env.JWT_SECRET);
-
 
             res.json({ 
                 message: "Login successful!", 
@@ -103,7 +103,7 @@ app.post("/login", async (req, res) => {
     }
 });
 
-// ✅ Protected Route Example (Token Required)
+// ✅ Fetch All Cases (Token Required)
 app.get("/cases", async (req, res) => {
     const token = req.headers.authorization?.split(" ")[1];
 
@@ -117,13 +117,21 @@ app.get("/cases", async (req, res) => {
 
         // Fetching cases from DynamoDB
         const params = {
-            TableName: "cases"  // Make sure the table name matches exactly!
+            TableName: CASES_TABLE
         };
 
-        const data = await dbClient.send(new ScanCommand(params));  // ✅ ScanCommand fixed
-        console.log("📂 Fetched cases data:", data.Items); // Log the fetched data
+        const data = await dbClient.send(new ScanCommand(params));
 
-        res.json(data.Items || []);
+        if (!data.Items) {
+            return res.json([]);
+        }
+
+        // Unmarshall the items
+        const cases = data.Items.map(item => unmarshall(item));
+
+        console.log("📂 Fetched cases data:", cases); // Log the fetched data
+
+        res.json(cases);
     } catch (error) {
         console.error("Invalid token or DB error:", error);
         res.status(403).json({ error: "Invalid or expired token" });
