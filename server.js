@@ -8,6 +8,7 @@ const {
     PutItemCommand 
 } = require("@aws-sdk/client-dynamodb");
 const { marshall, unmarshall } = require("@aws-sdk/util-dynamodb");
+const jwt = require("jsonwebtoken");
 
 const app = express();
 const port = 4000;
@@ -36,7 +37,7 @@ app.post("/add-user", async (req, res) => {
 
     const userData = {
         username,
-        password,  // 🚨 Storing password as plain text
+        password,  // 🚨 Storing password as plain text (for now)
         role
     };
 
@@ -54,7 +55,7 @@ app.post("/add-user", async (req, res) => {
     }
 });
 
-// ✅ User Login (Plain Text Passwords)
+// ✅ User Login (With Token)
 app.post("/login", async (req, res) => {
     const { username, password } = req.body;
 
@@ -71,19 +72,27 @@ app.post("/login", async (req, res) => {
         const { Item } = await dbClient.send(new GetItemCommand(params));
 
         if (!Item) {
-            return res.status(404).json({ error: "User not found" });
+            console.log("❌ User not found:", username);
+            return res.status(404).json({ error: "Invalid credentials" });
         }
 
         const user = unmarshall(Item);
 
-        // 🚨 Plain text comparison
+        // 🚨 Plain text password check (replace with hashing later!)
         if (password === user.password) {
+            console.log("✅ Login successful:", username);
+
+            // Generate a JWT token
+            const token = jwt.sign({ username: user.username, role: user.role }, process.env.JWT_SECRET, { expiresIn: "1h" });
+
             res.json({ 
                 message: "Login successful!", 
-                user: { username: user.username, role: user.role } 
+                token,
+                user: { username: user.username, role: user.role }
             });
         } else {
-            res.status(401).json({ error: "Invalid password" });
+            console.log("❌ Invalid password for:", username);
+            res.status(401).json({ error: "Invalid credentials" });
         }
     } catch (error) {
         console.error("Login failed:", error);
@@ -91,7 +100,27 @@ app.post("/login", async (req, res) => {
     }
 });
 
+// ✅ Protected Route Example (Token Required)
+app.get("/cases", (req, res) => {
+    const token = req.headers.authorization?.split(" ")[1];
+
+    if (!token) {
+        return res.status(401).json({ error: "Unauthorized - No token provided" });
+    }
+
+    try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        console.log("🔓 Token verified:", decoded);
+
+        // Fetch cases logic here...
+        res.json([{ id: 1, name: "Example Case", status: "Open" }]);
+    } catch (error) {
+        console.error("Invalid token:", error);
+        res.status(403).json({ error: "Invalid or expired token" });
+    }
+});
+
 // ✅ Start Server
 app.listen(port, () => {
-    console.log(`Server running on port ${port}`);
+    console.log(`🚀 Server running on port ${port}`);
 });
