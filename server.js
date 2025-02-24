@@ -102,7 +102,7 @@ app.post("/login", async (req, res) => {
 });
 
 // ✅ Protected Route Example (Token Required)
-app.get("/cases", (req, res) => {
+app.get("/cases", async (req, res) => {
     const token = req.headers.authorization?.split(" ")[1];
 
     if (!token) {
@@ -113,13 +113,21 @@ app.get("/cases", (req, res) => {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
         console.log("🔓 Token verified:", decoded);
 
-        // Demo response (replace with real data fetching logic)
-        res.json([{ id: 1, name: "Example Case", status: "Open" }]);
+        // Fetching cases from DynamoDB
+        const params = {
+            TableName: "cases"  // Make sure the table name matches exactly!
+        };
+
+        const data = await dbClient.send(new ScanCommand(params));
+        console.log("📂 Fetched cases data:", data.Items); // Log the fetched data
+
+        res.json(data.Items || []);
     } catch (error) {
-        console.error("❌ Invalid token:", error);
+        console.error("Invalid token or DB error:", error);
         res.status(403).json({ error: "Invalid or expired token" });
     }
 });
+
 
 // ✅ Start Server
 app.listen(port, () => {
