@@ -7,7 +7,8 @@ const {
     GetItemCommand, 
     PutItemCommand, 
     ScanCommand, 
-    DeleteItemCommand 
+    DeleteItemCommand,
+    UpdateItemCommand
 } = require("@aws-sdk/client-dynamodb");
 const { marshall, unmarshall } = require("@aws-sdk/util-dynamodb");
 const jwt = require("jsonwebtoken");
@@ -125,6 +126,44 @@ app.post("/add-case", verifyToken, async (req, res) => {
     } catch (error) {
         console.error("❌ Add case failed:", error);
         res.status(500).json({ error: "Failed to add case." });
+    }
+});
+
+// Update Case (New Endpoint)
+app.put("/update-case/:id", verifyToken, async (req, res) => {
+    const { id } = req.params;
+    const { date, staff, mobile, name, work, info, pending, remarks, status } = req.body;
+    if (!date || !staff || !mobile || !name) {
+        return res.status(400).json({ error: "Date, staff, mobile, and name are required" });
+    }
+    const params = {
+        TableName: CASES_TABLE,
+        Key: marshall({ id }),
+        UpdateExpression: "set #date = :date, staff = :staff, mobile = :mobile, #name = :name, work = :work, info = :info, pending = :pending, remarks = :remarks, status = :status",
+        ExpressionAttributeNames: {
+            "#date": "date",
+            "#name": "name"
+        },
+        ExpressionAttributeValues: marshall({
+            ":date": date,
+            ":staff": staff,
+            ":mobile": mobile,
+            ":name": name,
+            ":work": work,
+            ":info": info,
+            ":pending": pending,
+            ":remarks": remarks,
+            ":status": status
+        }),
+        ReturnValues: "ALL_NEW"
+    };
+    try {
+        const data = await dbClient.send(new UpdateItemCommand(params));
+        const updatedCase = unmarshall(data.Attributes);
+        res.json({ message: "Case updated successfully!", updatedCase });
+    } catch (error) {
+        console.error("❌ Update case failed:", error);
+        res.status(500).json({ error: "Failed to update case." });
     }
 });
 
