@@ -139,10 +139,11 @@ app.put("/update-case/:id", verifyToken, async (req, res) => {
     const params = {
         TableName: CASES_TABLE,
         Key: marshall({ id }),
-        UpdateExpression: "set #date = :date, staff = :staff, mobile = :mobile, #name = :name, work = :work, info = :info, pending = :pending, remarks = :remarks, status = :status",
+        UpdateExpression: "set #date = :date, staff = :staff, mobile = :mobile, #name = :name, #work = :work, info = :info, pending = :pending, remarks = :remarks, status = :status",
         ExpressionAttributeNames: {
             "#date": "date",
-            "#name": "name"
+            "#name": "name",
+            "#work": "work"
         },
         ExpressionAttributeValues: marshall({
             ":date": date,
