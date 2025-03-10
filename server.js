@@ -192,50 +192,53 @@ app.delete("/delete-case/:id", verifyToken, async (req, res) => {
 
 // Export Cases to Excel (CSV Format)
 app.get("/export-excel", async (req, res) => {
-  // Retrieve token from header or query
-  let token = req.headers.authorization?.split(" ")[1];
-  if (!token) {
-    token = req.query.token;
-  }
-  if (!token) {
-    return res.status(401).json({ error: "Unauthorized - No token provided" });
-  }
-  // Verify token
-  try {
-    jwt.verify(token, process.env.JWT_SECRET);
-  } catch (error) {
-    console.error("Invalid token in export-excel:", error);
-    return res.status(403).json({ error: "Invalid or expired token" });
-  }
-
-  const { from, to } = req.query;
-  if (!from || !to) {
-    return res.status(400).json({ error: "Both from and to dates are required" });
-  }
-  try {
-    const params = { TableName: CASES_TABLE };
-    const data = await dbClient.send(new ScanCommand(params));
-    let cases = [];
-    if (data.Items) {
-      cases = data.Items.map(item => unmarshall(item));
+    // Retrieve token from header or query parameter
+    let token = req.headers.authorization?.split(" ")[1];
+    if (!token) {
+        token = req.query.token;
     }
-    // Filter cases between from and to dates (assuming date format YYYY-MM-DD)
-    cases = cases.filter(c => c.date >= from && c.date <= to);
+    console.log("Received token in export-excel:", token); // Debug log
 
-    // Convert cases to CSV format
-    let csv = "id,date,staff,mobile,name,work,info,pending,remarks,status\n";
-    cases.forEach(c => {
-      csv += `"${c.id}","${c.date}","${c.staff}","${c.mobile}","${c.name}","${c.work}","${c.info}","${c.pending}","${c.remarks}","${c.status}"\n`;
-    });
+    if (!token) {
+        return res.status(401).json({ error: "Unauthorized - No token provided" });
+    }
+    // Verify token
+    try {
+        jwt.verify(token, process.env.JWT_SECRET);
+    } catch (error) {
+        console.error("Invalid token in export-excel:", error);
+        return res.status(403).json({ error: "Invalid or expired token" });
+    }
 
-    res.setHeader('Content-Disposition', 'attachment; filename="cases.csv"');
-    res.set('Content-Type', 'text/csv');
-    res.status(200).send(csv);
-  } catch (error) {
-    console.error("Error exporting cases:", error);
-    res.status(500).json({ error: "Failed to export cases." });
-  }
+    const { from, to } = req.query;
+    if (!from || !to) {
+        return res.status(400).json({ error: "Both from and to dates are required" });
+    }
+    try {
+        const params = { TableName: CASES_TABLE };
+        const data = await dbClient.send(new ScanCommand(params));
+        let cases = [];
+        if (data.Items) {
+            cases = data.Items.map(item => unmarshall(item));
+        }
+        // Filter cases between from and to dates (assumes date format YYYY-MM-DD)
+        cases = cases.filter(c => c.date >= from && c.date <= to);
+
+        // Convert cases to CSV format
+        let csv = "id,date,staff,mobile,name,work,info,pending,remarks,status\n";
+        cases.forEach(c => {
+            csv += `"${c.id}","${c.date}","${c.staff}","${c.mobile}","${c.name}","${c.work}","${c.info}","${c.pending}","${c.remarks}","${c.status}"\n`;
+        });
+
+        res.setHeader('Content-Disposition', 'attachment; filename="cases.csv"');
+        res.set('Content-Type', 'text/csv');
+        res.status(200).send(csv);
+    } catch (error) {
+        console.error("Error exporting cases:", error);
+        res.status(500).json({ error: "Failed to export cases." });
+    }
 });
+
 
 // Change Password Endpoint
 app.post("/change-password", verifyToken, async (req, res) => {
