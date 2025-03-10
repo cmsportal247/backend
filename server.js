@@ -136,6 +136,18 @@ app.put("/update-case/:id", verifyToken, async (req, res) => {
     if (!date || !staff || !mobile || !name) {
         return res.status(400).json({ error: "Date, staff, mobile, and name are required" });
     }
+    // Prepare update values; use defaults for optional fields
+    const updateValues = {
+        ":date": date,
+        ":staff": staff,
+        ":mobile": mobile,
+        ":name": name,
+        ":work": work || "",
+        ":info": info || "",
+        ":pending": pending !== undefined ? pending : false,
+        ":remarks": remarks || "",
+        ":status": status
+    };
     const params = {
         TableName: CASES_TABLE,
         Key: marshall({ id }),
@@ -145,20 +157,11 @@ app.put("/update-case/:id", verifyToken, async (req, res) => {
             "#name": "name",
             "#work": "work"
         },
-        ExpressionAttributeValues: marshall({
-            ":date": date,
-            ":staff": staff,
-            ":mobile": mobile,
-            ":name": name,
-            ":work": work,
-            ":info": info,
-            ":pending": pending,
-            ":remarks": remarks,
-            ":status": status
-        }),
+        ExpressionAttributeValues: marshall(updateValues),
         ReturnValues: "ALL_NEW"
     };
     try {
+        console.log("Update params:", params); // Debug log
         const data = await dbClient.send(new UpdateItemCommand(params));
         const updatedCase = unmarshall(data.Attributes);
         res.json({ message: "Case updated successfully!", updatedCase });
