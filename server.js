@@ -14,7 +14,7 @@ const { marshall, unmarshall } = require("@aws-sdk/util-dynamodb");
 const jwt = require("jsonwebtoken");
 
 const app = express();
-const port = 4000;
+const port = process.env.PORT || 4000;
 
 app.use(cors());
 app.use(bodyParser.json());
@@ -129,7 +129,7 @@ app.post("/add-case", verifyToken, async (req, res) => {
     }
 });
 
-// Update Case (New Endpoint)
+// Update Case
 app.put("/update-case/:id", verifyToken, async (req, res) => {
     const { id } = req.params;
     const { date, staff, mobile, name, work, info, pending, remarks, status } = req.body;
@@ -163,7 +163,7 @@ app.put("/update-case/:id", verifyToken, async (req, res) => {
         res.json({ message: "Case updated successfully!", updatedCase });
     } catch (error) {
         console.error("❌ Update case failed:", error);
-        res.status(500).json({ error: "Failed to update case." });
+        res.status(500).json({ error: "Failed to update case.", details: error.message });
     }
 });
 
