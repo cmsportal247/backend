@@ -161,7 +161,7 @@ app.put("/update-case/:id", verifyToken, async (req, res) => {
         ReturnValues: "ALL_NEW"
     };
     try {
-        console.log("Update params:", params); // Debug logging
+        console.log("Update params:", params);
         const data = await dbClient.send(new UpdateItemCommand(params));
         const updatedCase = unmarshall(data.Attributes);
         res.json({ message: "Case updated successfully!", updatedCase });
@@ -190,9 +190,8 @@ app.delete("/delete-case/:id", verifyToken, async (req, res) => {
     }
 });
 
-// Export Cases to Excel (CSV Format)// Export Cases to Excel (CSV Format)
+// Export Cases to Excel (CSV Format)
 app.get("/export-excel", async (req, res) => {
-    // Try to retrieve token from Authorization header or query parameter
     let token = req.headers.authorization?.split(" ")[1];
     if (!token) {
         token = req.query.token;
@@ -200,7 +199,6 @@ app.get("/export-excel", async (req, res) => {
     if (!token) {
         return res.status(401).json({ error: "Unauthorized - No token provided" });
     }
-    // Verify token
     try {
         jwt.verify(token, process.env.JWT_SECRET);
     } catch (error) {
@@ -236,7 +234,6 @@ app.get("/export-excel", async (req, res) => {
         res.status(500).json({ error: "Failed to export cases." });
     }
 });
-
 
 // Start Server
 app.listen(port, () => {
