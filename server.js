@@ -161,7 +161,7 @@ app.put("/update-case/:id", verifyToken, async (req, res) => {
         ReturnValues: "ALL_NEW"
     };
     try {
-        console.log("Update params:", params);
+        console.log("Update params:", params); // Debug logging
         const data = await dbClient.send(new UpdateItemCommand(params));
         const updatedCase = unmarshall(data.Attributes);
         res.json({ message: "Case updated successfully!", updatedCase });
@@ -187,6 +187,37 @@ app.delete("/delete-case/:id", verifyToken, async (req, res) => {
     } catch (error) {
         console.error("❌ Delete case failed:", error);
         res.status(500).json({ error: "Failed to delete case." });
+    }
+});
+
+// Export Cases to Excel (CSV Format)
+app.get("/export-excel", verifyToken, async (req, res) => {
+    const { from, to } = req.query;
+    if (!from || !to) {
+        return res.status(400).json({ error: "Both from and to dates are required" });
+    }
+    try {
+        const params = { TableName: CASES_TABLE };
+        const data = await dbClient.send(new ScanCommand(params));
+        let cases = [];
+        if (data.Items) {
+            cases = data.Items.map(item => unmarshall(item));
+        }
+        // Filter cases between from and to dates (assumes date format YYYY-MM-DD)
+        cases = cases.filter(c => c.date >= from && c.date <= to);
+
+        // Convert cases to CSV format
+        let csv = "id,date,staff,mobile,name,work,info,pending,remarks,status\n";
+        cases.forEach(c => {
+            csv += `"${c.id}","${c.date}","${c.staff}","${c.mobile}","${c.name}","${c.work}","${c.info}","${c.pending}","${c.remarks}","${c.status}"\n`;
+        });
+
+        res.setHeader('Content-Disposition', 'attachment; filename="cases.csv"');
+        res.set('Content-Type', 'text/csv');
+        res.status(200).send(csv);
+    } catch (error) {
+        console.error("Error exporting cases:", error);
+        res.status(500).json({ error: "Failed to export cases." });
     }
 });
 
