@@ -111,11 +111,15 @@ app.get("/cases", verifyToken, async (req, res) => {
 
 // Add New Case
 app.post("/add-case", verifyToken, async (req, res) => {
-  const { date, staff, mobile, name, work, info, pending, remarks, status } = req.body;
-  if (!date || !staff || !mobile || !name) {
-    return res.status(400).json({ error: "Date, staff, mobile, and name are required" });
+  const { date, name, mobile, altMobile, work, frameSize, frameColor, requiredDetails, advance, actualPrice, status } = req.body;
+  if (!date || !name || !mobile) {
+    return res.status(400).json({ error: "Date, name, and mobile are required" });
   }
-  const caseData = { id: Date.now().toString(), date, staff, mobile, name, work, info, pending, remarks, status };
+  const caseData = {
+    id: Date.now().toString(),
+    date, name, mobile, altMobile, work, frameSize, frameColor,
+    requiredDetails, advance, actualPrice, status
+  };
   const params = {
     TableName: CASES_TABLE,
     Item: marshall(caseData),
@@ -132,25 +136,30 @@ app.post("/add-case", verifyToken, async (req, res) => {
 // Update Case
 app.put("/update-case/:id", verifyToken, async (req, res) => {
   const { id } = req.params;
-  const { date, staff, mobile, name, work, info, pending, remarks, status } = req.body;
-  if (!date || !staff || !mobile || !name) {
-    return res.status(400).json({ error: "Date, staff, mobile, and name are required" });
+  const { date, name, mobile, altMobile, work, frameSize, frameColor, requiredDetails, advance, actualPrice, status } = req.body;
+  if (!date || !name || !mobile) {
+    return res.status(400).json({ error: "Date, name, and mobile are required" });
   }
   const updateValues = {
     ":date": date,
-    ":staff": staff,
-    ":mobile": mobile,
     ":name": name,
+    ":mobile": mobile,
+    ":altMobile": altMobile || "",
     ":work": work || "",
-    ":info": info || "",
-    ":pending": pending !== undefined ? pending : false,
-    ":remarks": remarks || "",
+    ":frameSize": frameSize || "",
+    ":frameColor": frameColor || "",
+    ":requiredDetails": requiredDetails || "",
+    ":advance": advance || "0",
+    ":actualPrice": actualPrice || "0",
     ":status": status
   };
   const params = {
     TableName: CASES_TABLE,
     Key: marshall({ id }),
-    UpdateExpression: "set #date = :date, staff = :staff, mobile = :mobile, #name = :name, #work = :work, info = :info, pending = :pending, remarks = :remarks, #status = :status",
+    UpdateExpression: `set #date = :date, #name = :name, mobile = :mobile, altMobile = :altMobile,
+                        #work = :work, frameSize = :frameSize, frameColor = :frameColor,
+                        requiredDetails = :requiredDetails, advance = :advance, actualPrice = :actualPrice,
+                        #status = :status`,
     ExpressionAttributeNames: {
       "#date": "date",
       "#name": "name",
@@ -161,7 +170,6 @@ app.put("/update-case/:id", verifyToken, async (req, res) => {
     ReturnValues: "ALL_NEW"
   };
   try {
-    console.log("Update params:", JSON.stringify(params, null, 2));
     const data = await dbClient.send(new UpdateItemCommand(params));
     const updatedCase = unmarshall(data.Attributes);
     res.json({ message: "Case updated successfully!", updatedCase });
@@ -190,79 +198,65 @@ app.delete("/delete-case/:id", verifyToken, async (req, res) => {
   }
 });
 
-// Export Cases to Excel (CSV Format)
+// Export Cases to Excel
 app.get("/export-excel", async (req, res) => {
-    // Retrieve token from header or query parameter
-    let token = req.headers.authorization?.split(" ")[1];
-    if (!token) {
-        token = req.query.token;
-    }
-    console.log("Received token in export-excel:", token); // Debug log
+  let token = req.headers.authorization?.split(" ")[1] || req.query.token;
+  if (!token) {
+    return res.status(401).json({ error: "Unauthorized - No token provided" });
+  }
 
-    if (!token) {
-        return res.status(401).json({ error: "Unauthorized - No token provided" });
-    }
-    // Verify token
-    try {
-        jwt.verify(token, process.env.JWT_SECRET);
-    } catch (error) {
-        console.error("Invalid token in export-excel:", error);
-        return res.status(403).json({ error: "Invalid or expired token" });
-    }
+  try {
+    jwt.verify(token, process.env.JWT_SECRET);
+  } catch (error) {
+    return res.status(403).json({ error: "Invalid or expired token" });
+  }
 
-    const { from, to } = req.query;
-    if (!from || !to) {
-        return res.status(400).json({ error: "Both from and to dates are required" });
-    }
-    try {
-        const params = { TableName: CASES_TABLE };
-        const data = await dbClient.send(new ScanCommand(params));
-        let cases = [];
-        if (data.Items) {
-            cases = data.Items.map(item => unmarshall(item));
-        }
-        // Filter cases between from and to dates (assumes date format YYYY-MM-DD)
-        cases = cases.filter(c => c.date >= from && c.date <= to);
+  const { from, to } = req.query;
+  if (!from || !to) {
+    return res.status(400).json({ error: "Both from and to dates are required" });
+  }
 
-        // Convert cases to CSV format
-        let csv = "id,date,staff,mobile,name,work,info,pending,remarks,status\n";
-        cases.forEach(c => {
-            csv += `"${c.id}","${c.date}","${c.staff}","${c.mobile}","${c.name}","${c.work}","${c.info}","${c.pending}","${c.remarks}","${c.status}"\n`;
-        });
+  try {
+    const data = await dbClient.send(new ScanCommand({ TableName: CASES_TABLE }));
+    let cases = data.Items ? data.Items.map(item => unmarshall(item)) : [];
 
-        res.setHeader('Content-Disposition', 'attachment; filename="cases.csv"');
-        res.set('Content-Type', 'text/csv');
-        res.status(200).send(csv);
-    } catch (error) {
-        console.error("Error exporting cases:", error);
-        res.status(500).json({ error: "Failed to export cases." });
-    }
+    // Filter by date
+    cases = cases.filter(c => c.date >= from && c.date <= to);
+
+    // Build CSV
+    const headers = "id,date,name,mobile,altMobile,work,frameSize,frameColor,requiredDetails,advance,actualPrice,status\n";
+    const csvRows = cases.map(c =>
+      `"${c.id}","${c.date}","${c.name}","${c.mobile}","${c.altMobile || ""}","${c.work || ""}","${c.frameSize || ""}","${c.frameColor || ""}","${c.requiredDetails || ""}","${c.advance || ""}","${c.actualPrice || ""}","${c.status || ""}"`
+    );
+    const csv = headers + csvRows.join("\n");
+
+    res.setHeader('Content-Disposition', 'attachment; filename="cases.csv"');
+    res.set('Content-Type', 'text/csv');
+    res.status(200).send(csv);
+  } catch (error) {
+    console.error("❌ Export cases failed:", error);
+    res.status(500).json({ error: "Failed to export cases." });
+  }
 });
 
-
-// Change Password Endpoint
+// Change Password
 app.post("/change-password", verifyToken, async (req, res) => {
   const { oldPassword, newPassword } = req.body;
+  const username = req.user.username;
+
   if (!oldPassword || !newPassword) {
     return res.status(400).json({ error: "Old and new passwords are required" });
   }
-  // Get user from token
-  const username = req.user.username;
+
   try {
-    // Fetch the current user data
-    const params = {
-      TableName: USERS_TABLE,
-      Key: marshall({ username })
-    };
-    const { Item } = await dbClient.send(new GetItemCommand(params));
-    if (!Item) {
-      return res.status(404).json({ error: "User not found" });
-    }
+    const { Item } = await dbClient.send(new GetItemCommand({ TableName: USERS_TABLE, Key: marshall({ username }) }));
+    if (!Item) return res.status(404).json({ error: "User not found" });
+
     const user = unmarshall(Item);
     if (oldPassword !== user.password) {
       return res.status(401).json({ error: "Old password is incorrect" });
     }
-    // Update the password
+
     const updateParams = {
       TableName: USERS_TABLE,
       Key: marshall({ username }),
